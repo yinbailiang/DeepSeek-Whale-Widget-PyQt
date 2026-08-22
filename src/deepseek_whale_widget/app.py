@@ -8,8 +8,8 @@ from PyQt6.QtWidgets import QApplication
 from .widget import WhaleWidget
 
 
-def main(argv=None) -> int:
-    app = QApplication(sys.argv if argv is None else argv)
+def main() -> int:
+    app = QApplication([])
     app.setApplicationName("DeepSeek Whale Widget (PyQt)")
     app.setApplicationDisplayName("DeepSeek 小鲸鱼余额挂件")
     app.setQuitOnLastWindowClosed(True)
@@ -17,7 +17,3 @@ def main(argv=None) -> int:
     widget.show()
     widget.refresh(False)  # 启动即拉一次余额
     return app.exec()
-
-
-if __name__ == "__main__":
-    sys.exit(main())

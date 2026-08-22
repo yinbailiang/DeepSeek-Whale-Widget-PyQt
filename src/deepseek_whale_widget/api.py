@@ -6,7 +6,7 @@ import os
 import re
 import urllib.error
 import urllib.request
-from typing import Any, Dict, Optional
+from typing import Any
 
 from . import storage
 from .pricing import compute_today_usage
@@ -18,13 +18,13 @@ HTTP_TIMEOUT = 20
 
 # ---------- 凭据 ----------
 
-def _parse_simple_yaml(text: str) -> Dict[str, Any]:
+def _parse_simple_yaml(text: str) -> dict[str, Any]:
     """极简 YAML 子集解析：支持缩进嵌套与 key: value。
 
     只用于 DSH 凭据文件这种简单场景，足够容错。
     """
-    root: Dict[str, Any] = {}
-    stack: list[tuple[int, Dict[str, Any]]] = [(-1, root)]
+    root: dict[str, Any] = {}
+    stack: list[tuple[int, dict[str, Any]]] = [(-1, root)]
     for raw in text.splitlines():
         if not raw.strip() or raw.lstrip().startswith("#"):
             continue
@@ -39,7 +39,7 @@ def _parse_simple_yaml(text: str) -> Dict[str, Any]:
             stack.pop()
         parent = stack[-1][1] if stack else root
         if value == "":
-            node: Dict[str, Any] = {}
+            node: dict[str, Any] = {}
             parent[key] = node
             stack.append((indent, node))
         else:
@@ -50,7 +50,7 @@ def _parse_simple_yaml(text: str) -> Dict[str, Any]:
     return root
 
 
-def _find_key(node: Any, key: str) -> Optional[str]:
+def _find_key(node: Any, key: str) -> str | None:
     if isinstance(node, dict):
         for k, v in node.items():
             if k == key and isinstance(v, str) and v:
@@ -61,7 +61,7 @@ def _find_key(node: Any, key: str) -> Optional[str]:
     return None
 
 
-def resolve_credentials() -> Dict[str, Optional[str]]:
+def resolve_credentials() -> dict[str, str | None]:
     """按优先级解析凭据：环境变量 > DSH 凭据 yaml > PyQt 本地凭据文件。"""
     api_key = os.environ.get("DEEPSEEK_API_KEY")
     platform_token = os.environ.get("DEEPSEEK_PLATFORM_TOKEN")
@@ -84,7 +84,7 @@ def resolve_credentials() -> Dict[str, Optional[str]]:
     api_key = api_key or local.get("DEEPSEEK_API_KEY")
     platform_token = platform_token or local.get("DEEPSEEK_PLATFORM_TOKEN")
 
-    def clean(tok: Optional[str]) -> Optional[str]:
+    def clean(tok: str | None) -> str | None:
         if not tok:
             return None
         tok = tok.strip()
@@ -95,17 +95,17 @@ def resolve_credentials() -> Dict[str, Optional[str]]:
 
 # ---------- HTTP ----------
 
-def _http_json(url: str, headers: Dict[str, str], timeout: int = HTTP_TIMEOUT) -> Any:
+def _http_json(url: str, headers: dict[str, str], timeout: int = HTTP_TIMEOUT) -> Any:
     req = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
 
-def fetch_balance(api_key: str) -> Dict[str, Any]:
+def fetch_balance(api_key: str) -> dict[str, Any]:
     """拉取余额。返回与原版一致的 payload 结构。"""
     if not api_key:
         return {"ok": False, "code": "NO_KEY", "error": "未配置 DEEPSEEK_API_KEY（可设环境变量或在菜单→API 设置里填）"}
-    last_err: Optional[Exception] = None
+    last_err: Exception | None = None
     for attempt in range(2):
         try:
             data = _http_json(
@@ -143,7 +143,7 @@ def fetch_balance(api_key: str) -> Dict[str, Any]:
     return {"ok": False, "code": code, "transient": transient, "error": msg}
 
 
-def _pick_balance_info(infos: Any) -> Optional[Dict[str, Any]]:
+def _pick_balance_info(infos: Any) -> dict[str, Any] | None:
     if not isinstance(infos, list) or len(infos) == 0:
         return None
 
@@ -165,16 +165,16 @@ def _pick_balance_info(infos: Any) -> Optional[Dict[str, Any]]:
     return infos[0] if isinstance(infos[0], dict) else None
 
 
-def fetch_usage(platform_token: str) -> Dict[str, Any]:
+def fetch_usage(platform_token: str) -> dict[str, Any]:
     """实时·令牌模式：调用平台用量接口，换算今日金额。"""
     if not platform_token:
         return {"error": "no platform token"}
     try:
         import datetime as dt
 
-        now = dt.datetime.now()
-        tz = -now.astimezone().utcoffset().total_seconds()
-        start = int(dt.datetime(now.year, now.month, now.day).timestamp())
+        now = dt.datetime.now(dt.timezone.utc).astimezone()
+        tz = -(now.utcoffset() or dt.timedelta()).total_seconds()
+        start = int(dt.datetime(now.year, now.month, now.day, tzinfo=now.tzinfo).timestamp())
         end = start + 86400
         url = f"{PLATFORM_USAGE_URL}?start={start}&end={end}&tz={int(tz)}"
         data = _http_json(url, {"Authorization": f"Bearer {platform_token}"}, timeout=15)

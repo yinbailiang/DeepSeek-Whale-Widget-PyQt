@@ -8,7 +8,7 @@ import random
 import threading
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from PyQt6.QtCore import (
     QEasingCurve,
@@ -57,11 +57,12 @@ from PyQt6.QtWidgets import (
 from . import api, storage
 from .pricing import fmt_amount, is_peak_time
 
+QAudioOutput: Any = None
+QMediaPlayer: Any = None
 try:  # QtMultimedia 可能因系统缺后端而不可用，静默降级
     from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer
 except Exception:  # pragma: no cover
-    QAudioOutput = None
-    QMediaPlayer = None
+    pass
 
 # ---------- 常量（与原版一致） ----------
 MIN_SCALE = 0.6
@@ -102,7 +103,7 @@ def _assets_dir() -> Path:
     return pkg.parent.parent / "assets"
 
 
-_FONT_FAMILY_CACHE: Optional[str] = None
+_FONT_FAMILY_CACHE: str | None = None
 _FONT_FAMILY_TRIED = False
 
 
@@ -233,11 +234,11 @@ class WhaleWidget(QWidget):
         self._turn_cost_on: bool = bool(cfg.get("turnCostOn", True))
         self._turn_cost_close_ms: int = int(cfg.get("turnCostCloseMs", 5000))
 
-        self._left: int = int(cfg.get("left") if cfg.get("left") is not None else 0)
-        self._top: int = int(cfg.get("top") if cfg.get("top") is not None else 0)
+        self._left: int = int(cfg.get("left") or 0)
+        self._top: int = int(cfg.get("top") or 0)
 
-        self._balance: Optional[float] = None
-        self._shown: Optional[float] = None
+        self._balance: float | None = None
+        self._shown: float | None = None
         self._currency: str = "CNY"
         self._today_usage: Any = None
         self._is_peak: bool = False
@@ -251,18 +252,18 @@ class WhaleWidget(QWidget):
         self._bubble_random = False
         self._cost_bubble = False
         self._gif_line = False
-        self._bubble_lines: List[Tuple[str, str, bool, str]] = []
+        self._bubble_lines: list[tuple[str, str, bool, str]] = []
         self._bubble_opacity = 0.0
-        self._bubble_timer: Optional[QTimer] = None
-        self._last_hint: Optional[str] = None
-        self._gif_movie: Optional[QMovie] = None
+        self._bubble_timer: QTimer | None = None
+        self._last_hint: str | None = None
+        self._gif_movie: QMovie | None = None
 
         # ---- 交互 ----
         self._pressing = False
         self._hover = False
         self._menu_open = False
-        self._drag: Optional[Dict[str, Any]] = None
-        self._menu: Optional[SettingsMenu] = None
+        self._drag: dict[str, Any] | None = None
+        self._menu: SettingsMenu | None = None
 
         # ---- 资源 ----
         assets = _assets_dir()
@@ -348,7 +349,7 @@ class WhaleWidget(QWidget):
         self._save_position()
 
     # ---------------- 绘制 ----------------
-    def paintEvent(self, event) -> None:  # noqa: N802
+    def paintEvent(self, event) -> None:  # type: ignore[reportIncompatibleMethodOverride]
         qp = QPainter(self)
         qp.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         qp.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
@@ -430,7 +431,7 @@ class WhaleWidget(QWidget):
             return QColor(HINT_COLOR)
         return QColor(TEXT_COLOR)
 
-    def _draw_lines(self, qp: QPainter, lines: List[Tuple[str, str, bool, str]], cx: float, cy: float, u: float, opacity: float) -> None:
+    def _draw_lines(self, qp: QPainter, lines: list[tuple[str, str, bool, str]], cx: float, cy: float, u: float, opacity: float) -> None:
         items = [(t, s, w, c) for (t, s, w, c) in lines if t]
         if not items:
             return
@@ -460,7 +461,7 @@ class WhaleWidget(QWidget):
     def _draw_wrapped(self, qp: QPainter, text: str, font: QFont, cx: float, center_y: float, max_w: float) -> None:
         fm = QFontMetrics(font)
         words = text.split(" ")
-        lines: List[str] = []
+        lines: list[str] = []
         cur = ""
         for wd in words:
             trial = (cur + " " + wd).strip()
@@ -544,7 +545,7 @@ class WhaleWidget(QWidget):
         return self._btn_rect(self._base()).contains(QPoint(int(pos.x()), int(pos.y())))
 
     # ---------------- 鼠标事件 ----------------
-    def mousePressEvent(self, event) -> None:  # noqa: N802
+    def mousePressEvent(self, event) -> None:  # type: ignore[reportIncompatibleMethodOverride]
         pos = event.position()
         if event.button() != Qt.MouseButton.LeftButton:
             return
@@ -575,7 +576,7 @@ class WhaleWidget(QWidget):
         self._update_mask()
         self.update()
 
-    def mouseMoveEvent(self, event) -> None:  # noqa: N802
+    def mouseMoveEvent(self, event) -> None:  # type: ignore[reportIncompatibleMethodOverride]
         pos = event.position()
         if self._drag:
             d = self._drag
@@ -601,7 +602,7 @@ class WhaleWidget(QWidget):
             self.setCursor(Qt.CursorShape.ArrowCursor)
         self.update()
 
-    def mouseReleaseEvent(self, event) -> None:  # noqa: N802
+    def mouseReleaseEvent(self, event) -> None:  # type: ignore[reportIncompatibleMethodOverride]
         if not self._drag:
             return
         d = self._drag
@@ -618,7 +619,7 @@ class WhaleWidget(QWidget):
             return
         self._snap_and_save()
 
-    def leaveEvent(self, event) -> None:  # noqa: N802
+    def leaveEvent(self, event) -> None:  # type: ignore[reportIncompatibleMethodOverride]
         self._hover = False
         self.setCursor(Qt.CursorShape.ArrowCursor)
         self.update()
@@ -631,7 +632,7 @@ class WhaleWidget(QWidget):
         self._save_position()
 
     # ---------------- 气泡 ----------------
-    def _default_lines(self) -> List[Tuple[str, str, bool, str]]:
+    def _default_lines(self) -> list[tuple[str, str, bool, str]]:
         amount = fmt_amount(self._shown if self._shown is not None else self._balance, self._currency)
         if self._status == "error":
             amount = fmt_amount(self._shown, self._currency) if self._shown is not None else "--"
@@ -773,8 +774,8 @@ class WhaleWidget(QWidget):
             self._gif_movie.stop()
 
     # ---------------- 随机台词 ----------------
-    def _pick_random_lines(self) -> Tuple[bool, List[Tuple[str, str, bool, str]]]:
-        groups: List[Tuple[int, Any]] = [
+    def _pick_random_lines(self) -> tuple[bool, list[tuple[str, str, bool, str]]]:
+        groups: list[tuple[int, Any]] = [
             (45, self._group1),
             (7, lambda: ([("好模型... ↓", "B", False, "")], False)),
             (7, lambda: ([(random.choice(RANDOM_TAUNTS), "A", True, "")], False)),
@@ -820,7 +821,7 @@ class WhaleWidget(QWidget):
         payload = self._fetch_payload()
         self.payload_ready.emit(payload)
 
-    def _fetch_payload(self) -> Dict[str, Any]:
+    def _fetch_payload(self) -> dict[str, Any]:
         try:
             creds = api.resolve_credentials()
             payload = api.fetch_balance(creds.get("api_key") or "")
@@ -842,7 +843,7 @@ class WhaleWidget(QWidget):
         except Exception as e:  # pragma: no cover
             return {"ok": False, "code": "ERROR", "error": f"余额服务异常: {e}"}
 
-    def _on_payload(self, payload: Dict[str, Any]) -> None:
+    def _on_payload(self, payload: dict[str, Any]) -> None:
         self._busy = False
         try:
             if payload.get("ok"):
@@ -931,14 +932,15 @@ class WhaleWidget(QWidget):
         self.update()
 
     # ---------------- 每轮对话消耗（可选，读 DSH 导出的 JSON） ----------------
-    def _last_turn_candidates(self) -> List[Path]:
+    def _last_turn_candidates(self) -> list[Path]:
         env = os.environ.get("DSHW_LAST_TURN_FILE")
         home = storage.dsh_home()
-        return [
+        cands: list[Path | None] = [
             Path(env) if env else None,
             home / ".dshw-last-turn.json",
             Path.home() / ".dshw-last-turn.json",
         ]
+        return [p for p in cands if p is not None]
 
     def _poll_last_turn(self) -> None:
         for p in self._last_turn_candidates():
@@ -1166,7 +1168,9 @@ class SettingsMenu(QFrame):
         api_btn = QPushButton("API 设置…")
         api_btn.clicked.connect(self._w.open_credentials_dialog)
         quit_btn = QPushButton("退出")
-        quit_btn.clicked.connect(QApplication.instance().quit)
+        _app = QApplication.instance()
+        if _app is not None:
+            quit_btn.clicked.connect(_app.quit)
         row.addWidget(api_btn)
         row.addWidget(quit_btn)
         lay.addLayout(row)
@@ -1190,7 +1194,7 @@ class SettingsMenu(QFrame):
 
     @staticmethod
     def _scale_to_display(s: float) -> int:
-        return int(round(1 + (s - MIN_SCALE) / (MAX_SCALE - MIN_SCALE) * 19))
+        return round(1 + (s - MIN_SCALE) / (MAX_SCALE - MIN_SCALE) * 19)
 
     @staticmethod
     def _display_to_scale(v: int) -> float:
@@ -1232,7 +1236,7 @@ class SettingsMenu(QFrame):
     def _on_turn_close(self, v: int) -> None:
         self._w.set_turn_cost_close_ms(v * 1000)
 
-    def hideEvent(self, event) -> None:  # noqa: N802
+    def hideEvent(self, event) -> None:  # type: ignore[reportIncompatibleMethodOverride]
         # 用户点击外部 / 按 Esc 关闭 Popup 时同步挂件状态
         self._w._menu_open = False
         self._w.update()

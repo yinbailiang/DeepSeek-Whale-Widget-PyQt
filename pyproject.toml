@@ -20,7 +20,18 @@ dependencies = [
 dsh-whale-widget = "deepseek_whale_widget.app:main"
 
 [project.optional-dependencies]
-dev = []
+dev = [
+    "ruff>=0.6.0",
+    "pyright>=1.1.370",
+]
+
+[tool.ruff.lint]
+# 桌面挂件大量使用“尽力而为”的静默降级（QtMultimedia 后端缺失、候选配置文件逐个尝试、
+# 网络抖动重试、读外部 JSON 失败即跳过等），这些属于有意的容错，忽略相关规则。
+ignore = ["BLE001", "S110", "S112"]
+
+[tool.pyright]
+typeCheckingMode = "strict"
 
 [build-system]
 requires = ["hatchling"]

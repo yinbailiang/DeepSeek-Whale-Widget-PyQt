@@ -8,20 +8,20 @@ from __future__ import annotations
 
 import math
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 # 高峰时段 [开始小时, 结束小时)，北京时间
-PEAK_HOURS: List[Tuple[int, int]] = [
+PEAK_HOURS: list[tuple[int, int]] = [
     (9, 12),
     (14, 18),
 ]
 
 # 基础价：缓存命中=输入价；未命中=输入；输出+推理=输出
-BASE_PRICE: Dict[str, List[float]] = {"hit": [0.05, 0.1], "miss": [1.5, 3.0], "out": [4.5, 9.0]}
+BASE_PRICE: dict[str, list[float]] = {"hit": [0.05, 0.1], "miss": [1.5, 3.0], "out": [4.5, 9.0]}
 # deepseek-v4-pro 为 flash 的 3 倍价（官方 2026-08-17 生效）；vision-exp 与 flash 同价
-PRO_PRICE: Dict[str, List[float]] = {"hit": [0.15, 0.3], "miss": [4.5, 9.0], "out": [13.5, 27.0]}
+PRO_PRICE: dict[str, list[float]] = {"hit": [0.15, 0.3], "miss": [4.5, 9.0], "out": [13.5, 27.0]}
 
-PRICING: Dict[str, Dict[str, List[float]]] = {
+PRICING: dict[str, dict[str, list[float]]] = {
     "deepseek-v4-flash-vision-exp": BASE_PRICE,
     "deepseek-v4-flash": BASE_PRICE,
     "deepseek-v4-pro": PRO_PRICE,
@@ -37,7 +37,7 @@ WEEKEND_VALLEY_FROM_SEC: float = WEEKEND_VALLEY_FROM.timestamp()
 BJ_TZ = timezone(timedelta(hours=8))
 
 
-def price_for(model: Optional[str]) -> Dict[str, List[float]]:
+def price_for(model: str | None) -> dict[str, list[float]]:
     """按模型名匹配定价表（子串匹配，与原版一致）。"""
     m = str(model or "").lower()
     for key, price in PRICING.items():
@@ -61,10 +61,9 @@ def is_peak_time(time_sec: Any) -> bool:
     if not math.isfinite(n):
         return False
     bj = datetime.fromtimestamp(n, tz=BJ_TZ)
-    if n >= WEEKEND_VALLEY_FROM_SEC:
-        # 生效时刻起，周末全天谷价
-        if bj.weekday() >= 5:  # 5=周六 6=周日
-            return False
+    # 生效时刻起，周末全天谷价（5=周六 6=周日）
+    if n >= WEEKEND_VALLEY_FROM_SEC and bj.weekday() >= 5:
+        return False
     hour = bj.hour
     for start, end in PEAK_HOURS:
         if start <= hour < end:
@@ -80,7 +79,7 @@ def _num(v: Any) -> float:
         return 0.0
 
 
-def compute_today_usage(data: Any) -> Optional[Dict[str, float]]:
+def compute_today_usage(data: Any) -> dict[str, float] | None:
     """把平台用量接口返回换算成今日金额。
 
     data.data.biz_data.series[]: [{model, buckets:[{time, usage:{RESPONSE_TOKEN,

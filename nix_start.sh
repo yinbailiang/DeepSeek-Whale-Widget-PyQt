@@ -1,0 +1,1 @@
+nix-shell -p python3 python3Packages.pyqt6 libGL pipewire  --run "QT_QPA_PLATFORM=xcb python -m src.deepseek_whale_widget"
